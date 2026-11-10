@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownUp, ArrowRight, ArrowUpRight, BookOpen, Command, FileText, FolderOpen, House, Lightbulb, Network, Plus, Search, Settings, Sparkles } from "lucide-react";
 import { labels, type Locale } from "../lib/copy";
 import { emptyWorkspace, kinds, newEntry, relationKey, removeEntry, search, suggest, workspaceSchema, type Entry, type Kind, type Predicate, type Relation, type Workspace } from "../lib/knowledge";
+import { publicPath } from "../lib/public-path";
 import { loadLocal, saveLocal } from "../lib/local";
 import { Constellation, KindIcon } from "./ui";
 import { Assistant, SettingsPanel } from "./panels";
@@ -148,7 +149,7 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
   return <div className="shell">
     <a className="skip-link" href="#main">{t("Saltar al contenido", "Skip to content")}</a>
     <aside className="sidebar">
-      <button className="brand" onClick={() => navigate("home")}><img src="/nexus.svg" width="38" height="38" alt="" /><span><strong>NEXUS</strong><small>{t("ESTUDIO PERSONAL", "PERSONAL STUDIO")}</small></span></button>
+      <button className="brand" onClick={() => navigate("home")}><img src={publicPath("/nexus.svg")} width="38" height="38" alt="" /><span><strong>NEXUS</strong><small>{t("ESTUDIO PERSONAL", "PERSONAL STUDIO")}</small></span></button>
       <p className="sidebar-label">{t("ESPACIO DE TRABAJO", "WORKSPACE")}</p>
       <nav className="navigation" aria-label={t("Principal", "Main")}>{navigation.map(name => {
         const Icon = icons[name];
@@ -158,7 +159,7 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
     </aside>
     <div className="work">
       <header className="topbar">
-        <div className="breadcrumb"><span className="mobile-mark"><img src="/nexus.svg" alt="" width="27" height="27" /></span><span>{t("Mi espacio", "My space")}</span><span className="slash">/</span><strong>{title[view]}</strong></div>
+        <div className="breadcrumb"><span className="mobile-mark"><img src={publicPath("/nexus.svg")} alt="" width="27" height="27" /></span><span>{t("Mi espacio", "My space")}</span><span className="slash">/</span><strong>{title[view]}</strong></div>
         <div className="top-actions">
           <button className="search-launch secondary" aria-label={t("Buscar", "Search")} onClick={() => { navigate("library"); setFilter("all"); requestAnimationFrame(() => searchInput.current?.focus()); }}><Search size={16}/><span>{t("Buscar", "Search")}</span><kbd><Command size={11}/> K</kbd></button>
           <button className="primary" onClick={() => capture("note")} disabled={!ready}><Plus size={17}/><span>{t("Capturar", "Capture")}</span></button>

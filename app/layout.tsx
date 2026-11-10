@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./styles.css";
 
+import { publicPath } from "../lib/public-path";
+
 export const metadata: Metadata = {
   title: "NEXUS · Tu espacio para pensar",
   description: "Captura, organiza y conecta tu conocimiento personal.",
-  manifest: "/manifest.webmanifest",
-  icons: { icon: "/nexus.svg", apple: "/apple-icon.png" },
+  manifest: publicPath("/manifest.webmanifest"),
+  icons: { icon: publicPath("/nexus.svg"), apple: publicPath("/apple-icon.png") },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "NEXUS" }
 };
 

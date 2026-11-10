@@ -17,3 +17,9 @@
 6. En **Asistente**, crea una nota de prueba con un dato distintivo, autorízala y pregunta por ese dato. Abre la referencia. Prueba también una pregunta sin respaldo y un documento que contenga instrucciones maliciosas. Confirma el consumo en el panel de Mistral.
 
 Antes de abrir registros públicos, revisa la política de retención de Mistral, configura las protecciones de Supabase Auth y valida las cuotas con datos de prueba. Durante pruebas privadas, puedes limitar altas e invitar las cuentas de verificación desde Supabase.
+
+## Vista previa en GitHub Pages
+
+El workflow `Deploy Pages preview` publica la versión estática al actualizar `main`. En **Settings → Pages**, el origen debe ser **GitHub Actions**. La vista previa usa la biblioteca del navegador y admite captura, búsqueda, grafo, temas y exportación. Las rutas de autenticación y API solo se compilan en el despliegue Node.
+
+La biblioteca de cada sitio se guarda en el navegador. Para trasladarla al futuro despliegue, exporta un JSON desde Ajustes e impórtalo en el nuevo sitio.
