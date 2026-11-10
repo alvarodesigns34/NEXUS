@@ -1,13 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownUp, ArrowRight, ArrowUpRight, BookOpen, Command, FileText, FolderOpen, House, Lightbulb, Network, Plus, Search, Settings, Sparkles } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ArrowDownUp, ArrowRight, ArrowUpRight, BookOpen, ChevronRight, Command, FileText, FolderOpen, House, Lightbulb, Network, Plus, Search, Settings, Sparkles, Star, Tag, X } from "lucide-react";
 import { labels, type Locale } from "../lib/copy";
-import { emptyWorkspace, kinds, newEntry, relationKey, removeEntry, search, suggest, workspaceSchema, type Entry, type Kind, type Predicate, type Relation, type Workspace } from "../lib/knowledge";
+import { emptyWorkspace, excerpt, kinds, newEntry, normalize, relationKey, removeEntry, search, suggest, workspaceSchema, type Entry, type Kind, type Predicate, type Relation, type Workspace } from "../lib/knowledge";
 import { publicPath } from "../lib/public-path";
 import { loadLocal, saveLocal } from "../lib/local";
-import { Constellation, KindIcon } from "./ui";
+import { KindIcon } from "./ui";
+import Orbit from "./orbit";
+import SearchPalette from "./search-palette";
 import { Assistant, SettingsPanel } from "./panels";
 
 const Editor = dynamic(() => import("./editor"));
@@ -33,7 +35,12 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
   const [editing, setEditing] = useState<{ entry: Entry; isNew: boolean } | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Kind | "all">("all");
-  const [alpha, setAlpha] = useState(false);
+  const [sort, setSort] = useState("recent");
+  const [tag, setTag] = useState("");
+  const [favorites, setFavorites] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [limit, setLimit] = useState(40);
+  const deferredQuery = useDeferredValue(query);
   const searchInput = useRef<HTMLInputElement>(null);
   const lock = useRef(false);
   const t = (es: string, en: string) => locale === "es" ? es : en;
@@ -76,9 +83,7 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
     function keydown(event: KeyboardEvent) {
       if (editing || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
-      setView("library"); setFilter("all");
-      window.scrollTo(0, 0);
-      requestAnimationFrame(() => searchInput.current?.focus());
+      setPalette(open => !open);
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
@@ -129,21 +134,38 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
     return commit({ ...workspace, entries, relations });
   }
 
+  const tags = useMemo(() => Array.from(new Map(workspace.entries.flatMap(entry => entry.tags.map(value => [normalize(value), value] as const))).values()).sort((a, b) => a.localeCompare(b, locale)), [workspace.entries, locale]);
   const filtered = useMemo(() => {
-    const results = search(workspace.entries, query).filter(entry => filter === "all" || entry.kind === filter);
-    return alpha ? results.sort((a, b) => a.title.localeCompare(b.title, locale)) : results;
-  }, [workspace.entries, query, filter, alpha, locale]);
+    const candidates = workspace.entries.filter(entry =>
+      (filter === "all" || entry.kind === filter) && (!favorites || entry.pinned) &&
+      (!tag || entry.tags.some(value => normalize(value) === tag))
+    );
+    const results = search(candidates, deferredQuery);
+    if (sort === "title") return results.sort((a, b) => a.title.localeCompare(b.title, locale));
+    if (sort === "new") return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return results;
+  }, [workspace.entries, deferredQuery, filter, tag, favorites, sort, locale]);
   const recent = useMemo(() => search(workspace.entries, "").slice(0, 5), [workspace.entries]);
   const pinned = workspace.entries.filter(entry => entry.pinned).slice(0, 5);
+  const hasFilters = Boolean(query || tag || favorites || filter !== "all");
   const title = viewLabels[locale];
   const date = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(today ?? undefined);
   const currentEdges = editing ? workspace.relations.filter(edge => edge.status === "accepted" && (edge.from === editing.entry.id || edge.to === editing.entry.id)) : [];
 
-  function itemRows(entries: Entry[]) {
-    return <ul className="item-list">{entries.map(entry => <li key={entry.id}><button className="item-row" onClick={() => open(entry.id)}>
-      <KindIcon kind={entry.kind}/><span className="item-text"><strong>{entry.title}</strong><small>{labels[locale][entry.kind]}{entry.tags.length > 0 ? " · " + entry.tags.slice(0, 3).join(" · ") : ""}</small></span>
-      <span className="item-date">{new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(new Date(entry.updatedAt))}</span><ArrowUpRight size={15}/>
-    </button></li>)}</ul>;
+  function resetFilters() {
+    setQuery(""); setTag(""); setFavorites(false); setFilter("all"); setLimit(40);
+  }
+
+  function itemRows(entries: Entry[], showExcerpt = false) {
+    return <ul className="item-list">{entries.map(entry => {
+      const summary = showExcerpt && excerpt(entry, deferredQuery);
+      return <li key={entry.id}><button className="item-row" onClick={() => open(entry.id)}>
+        <KindIcon kind={entry.kind}/><span className="item-text"><strong>{entry.title}{entry.pinned && <Star size={13} className="item-star" aria-label={t("Destacado", "Pinned")}/>}</strong>
+        {summary && <span className="item-excerpt">{summary}</span>}
+        <small>{labels[locale][entry.kind]}{entry.tags.length > 0 ? " · " + entry.tags.slice(0, 3).join(" · ") : ""}</small></span>
+        <span className="item-date">{new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(new Date(entry.updatedAt))}</span><ChevronRight size={16} aria-hidden="true"/>
+      </button></li>;
+    })}</ul>;
   }
 
   return <div className="shell">
@@ -151,41 +173,46 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
     <aside className="sidebar">
       <button className="brand" onClick={() => navigate("home")}><img src={publicPath("/nexus.svg")} width="38" height="38" alt="" /><span><strong>NEXUS</strong><small>{t("ESTUDIO PERSONAL", "PERSONAL STUDIO")}</small></span></button>
       <p className="sidebar-label">{t("ESPACIO DE TRABAJO", "WORKSPACE")}</p>
-      <nav className="navigation" aria-label={t("Principal", "Main")}>{navigation.map(name => {
+      <nav className="navigation" aria-label={t("Principal", "Main")} style={{ "--dock-index": navigation.indexOf(view), "--dock-count": navigation.length } as CSSProperties}>
+      <span className="dock-lens" aria-hidden="true" />
+      {navigation.map(name => {
         const Icon = icons[name];
-        return <button className={view === name ? "nav-item active" : "nav-item"} key={name} aria-current={view === name ? "page" : undefined} onClick={() => { if (name === "library") { setQuery(""); setFilter("all"); } navigate(name); }}><Icon size={19} aria-hidden="true"/><span>{title[name]}</span></button>;
+        return <button className={view === name ? "nav-item active" : "nav-item"} key={name} aria-current={view === name ? "page" : undefined} onClick={() => navigate(name)}><span className="nav-icon"><Icon size={21} aria-hidden="true"/></span><span>{title[name]}</span></button>;
       })}</nav>
       <div className="sidebar-bottom"><div className="profile-mark">N</div><div><strong>{t("Mi espacio", "My space")}</strong><small><i/>{t("En este dispositivo", "On this device")}</small></div></div>
     </aside>
     <div className="work">
       <header className="topbar">
-        <div className="breadcrumb"><span className="mobile-mark"><img src={publicPath("/nexus.svg")} alt="" width="27" height="27" /></span><span>{t("Mi espacio", "My space")}</span><span className="slash">/</span><strong>{title[view]}</strong></div>
+        <div className="breadcrumb"><span className="mobile-mark"><img src={publicPath("/nexus.svg")} alt="" width="32" height="32" /><b>Nexus</b></span><span>{t("Mi espacio", "My space")}</span><span className="slash">/</span><strong>{title[view]}</strong></div>
         <div className="top-actions">
-          <button className="search-launch secondary" aria-label={t("Buscar", "Search")} onClick={() => { navigate("library"); setFilter("all"); requestAnimationFrame(() => searchInput.current?.focus()); }}><Search size={16}/><span>{t("Buscar", "Search")}</span><kbd><Command size={11}/> K</kbd></button>
-          <button className="primary" onClick={() => capture("note")} disabled={!ready}><Plus size={17}/><span>{t("Capturar", "Capture")}</span></button>
+          <button className="search-launch secondary" aria-label={t("Buscar", "Search")} onClick={() => setPalette(true)}><Search size={16}/><span>{t("Buscar", "Search")}</span><kbd><Command size={11}/> K</kbd></button>
+          <button className="primary top-capture" aria-label={t("Capturar", "Capture")} onClick={() => capture("note")} disabled={!ready}><Plus size={23}/><span>{t("Capturar", "Capture")}</span></button>
         </div>
       </header>
       <main id="main" className="main" tabIndex={-1}>
         {view === "home" && <div className="home enter">
-          <div className="date-line"><span className="status-dot"/>{today ? date : "\u00a0"}</div>
+          <header className="home-intro">
+            <div><p className="date-line">{today ? date : "\u00a0"}</p><h1>{t("Tu espacio", "Your space")}<span>.</span></h1></div>
+            <span className="local-chip"><i/>{t("En este dispositivo", "On this device")}</span>
+          </header>
           <section className="hero">
-            <Constellation/>
+            <Orbit/>
             <div className="hero-content">
-              <p className="eyebrow"><span/> {t("TU SEGUNDO CEREBRO", "YOUR SECOND BRAIN")}</p>
-              <h1>{t("Un lugar para", "A space for")}<br/><em>{t("pensar mejor.", "thinking better.")}</em></h1>
-              <p>{t("Captura lo que importa. Conecta lo que aprendes.", "Capture what matters. Connect what you learn.")}</p>
+              <p className="eyebrow"><Sparkles size={13}/> {t("TU SEGUNDO CEREBRO", "YOUR SECOND BRAIN")}</p>
+              <h2>{t("Las ideas", "Ideas")}<br/>{t("se encuentran.", "come together.")}</h2>
+              <p>{t("De una primera idea a todo lo que la conecta.", "From a first idea to everything it connects.")}</p>
               <button className="hero-button" onClick={() => capture("idea")} disabled={!ready}>{t("Capturar una idea", "Capture an idea")}<ArrowRight size={17}/></button>
             </div>
-            <span className="hero-index" aria-hidden="true">FIG. 01 &nbsp; / &nbsp; NEXUS</span>
+            <span className="hero-index" aria-hidden="true">N° 01 <span/> ÓRBITA</span>
           </section>
-          <section className="quick"><p className="eyebrow">{t("EMPEZAR", "GET STARTED")}</p><h2>{t("Captura rápida", "Quick capture")}</h2><div className="quick-actions">
+          <section className="quick"><h2>{t("Captura rápida", "Quick capture")}</h2><div className="quick-actions">
             {([{ kind: "note", Icon: FileText, description: t("Escribe y desarrolla", "Write and develop") }, { kind: "idea", Icon: Lightbulb, description: t("Guarda un destello", "Save a spark") }, { kind: "project", Icon: FolderOpen, description: t("Reúne lo que haces", "Bring your work together") }] as const).map(({kind, Icon, description}) =>
               <button className="quick-action" key={kind} onClick={() => capture(kind)} disabled={!ready}><span className={`kind-icon kind-${kind}`}><Icon size={19}/></span><span><strong>{labels[locale][kind]}</strong><small>{description}</small></span><ArrowUpRight size={15} className="quick-arrow"/></button>)}
           </div></section>
           <div className="home-columns">
-            <section><div className="list-heading"><div><p className="eyebrow">{t("TU BIBLIOTECA", "YOUR LIBRARY")}</p><h2>{t("Actividad reciente", "Recent activity")}</h2></div><button className="quiet" onClick={() => { setQuery(""); setFilter("all"); navigate("library"); }}>{t("Ver todo", "View all")} <ArrowRight size={14}/></button></div>
+            <section><div className="list-heading"><div><p className="eyebrow">{t("TU BIBLIOTECA", "YOUR LIBRARY")}</p><h2>{t("Actividad reciente", "Recent activity")}</h2></div><button className="quiet" onClick={() => { resetFilters(); navigate("library"); }}>{t("Ver todo", "View all")} <ArrowRight size={14}/></button></div>
             {recent.length ? itemRows(recent) : <div className="empty home-empty"><FileText size={21}/><h3>{t("Todavía está por escribir", "Still to be written")}</h3><p>{t("Tus primeras capturas aparecerán aquí.", "Your first captures will appear here.")}</p></div>}</section>
-            <section className="overview"><p className="eyebrow">{t("EN CIFRAS", "AT A GLANCE")}</p><h2>{t("Tu espacio", "Your space")}</h2><dl><div><dt>{t("Elementos", "Items")}</dt><dd>{workspace.entries.length}</dd></div><div><dt>{t("Conexiones", "Connections")}</dt><dd>{workspace.relations.filter(edge => edge.status === "accepted").length}</dd></div><div><dt>{t("Proyectos", "Projects")}</dt><dd>{workspace.entries.filter(entry => entry.kind === "project").length}</dd></div></dl></section>
+            <section className="overview"><p className="eyebrow">{t("EN CIFRAS", "AT A GLANCE")}</p><h2>{t("Tu actividad", "Your activity")}</h2><dl><div><dt>{t("Elementos", "Items")}</dt><dd>{workspace.entries.length}</dd></div><div><dt>{t("Conexiones", "Connections")}</dt><dd>{workspace.relations.filter(edge => edge.status === "accepted").length}</dd></div><div><dt>{t("Proyectos", "Projects")}</dt><dd>{workspace.entries.filter(entry => entry.kind === "project").length}</dd></div></dl></section>
           </div>
           {pinned.length > 0 && <section className="pinned"><p className="eyebrow">{t("A MANO", "WITHIN REACH")}</p><h2>{t("Destacados", "Pinned")}</h2>{itemRows(pinned)}</section>}
           {pending.length > 0 && <section className="pinned"><p className="eyebrow">{t("POR REVISAR", "TO REVIEW")}</p><h2>{t("Conexiones sugeridas", "Suggested connections")}</h2>
@@ -196,11 +223,24 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
         </div>}
         {view === "library" && <section className="section-content enter">
           <div className="section-title"><div><p className="eyebrow">{t("TU CONOCIMIENTO", "YOUR KNOWLEDGE")}</p><h1>{title.library}</h1></div><button className="primary" onClick={() => capture(filter === "all" ? "note" : filter)} disabled={!ready}><Plus size={16}/>{t("Nuevo", "New")}</button></div>
-          <div className="filters library-filters"><label className="search-field"><Search size={18}/><input ref={searchInput} value={query} onChange={event => setQuery(event.target.value)} aria-label={t("Buscar en la biblioteca", "Search the library")} placeholder={t("Busca títulos, contenido o etiquetas…", "Search titles, content or tags…")} /></label>
-          <select aria-label={t("Filtrar por tipo", "Filter by type")} value={filter} onChange={event => setFilter(event.target.value as Kind | "all")}><option value="all">{t("Todos los tipos", "All types")}</option>{kinds.map(kind => <option value={kind} key={kind}>{labels[locale][kind]}</option>)}</select>
-          <button className="secondary" aria-pressed={alpha} onClick={() => setAlpha(!alpha)}><ArrowDownUp size={16}/>{alpha ? "A–Z" : t("Recientes", "Recent")}</button></div>
-          <p className="muted result-count" aria-live="polite">{filtered.length} {t("elementos", "items")}</p>
-          {filtered.length ? itemRows(filtered) : <div className="empty"><BookOpen size={25}/><h2>{query || filter !== "all" ? t("Sin coincidencias", "No matches") : t("Tu biblioteca está vacía", "Your library is empty")}</h2><p>{query || filter !== "all" ? t("Prueba otra búsqueda o cambia el filtro.", "Try another search or change your filter.") : t("Guarda una primera nota para empezar a construirla.", "Save a first note to get started.")}</p></div>}
+          <div className="filters library-filters">
+            <label className="search-field"><Search size={19}/><input ref={searchInput} type="search" enterKeyHint="search" value={query} onChange={event => { setQuery(event.target.value); setLimit(40); }} aria-label={t("Buscar en la biblioteca", "Search the library")} placeholder={t("Títulos, contenido o etiquetas…", "Titles, content or tags…")} /></label>
+            <div className="library-tools">
+              <button className="secondary filter-chip" aria-pressed={favorites} onClick={() => { setFavorites(!favorites); setLimit(40); }}><Star size={16}/>{t("Destacados", "Pinned")}</button>
+              <label className="filter-select"><Tag size={16} aria-hidden="true"/><select aria-label={t("Filtrar por etiqueta", "Filter by tag")} value={tag} onChange={event => { setTag(event.target.value); setLimit(40); }}><option value="">{t("Etiquetas", "Tags")}</option>{tags.map(value => <option key={value} value={normalize(value)}>{value}</option>)}</select></label>
+              <label className="filter-select"><ArrowDownUp size={16} aria-hidden="true"/><select aria-label={t("Ordenar", "Sort")} value={sort} onChange={event => { setSort(event.target.value); setLimit(40); }}><option value="recent">{t("Recientes", "Recent")}</option><option value="new">{t("Creación", "Created")}</option><option value="title">A–Z</option></select></label>
+            </div>
+          </div>
+          <div className="kind-filters" aria-label={t("Filtrar por tipo", "Filter by type")}>
+            <button aria-pressed={filter === "all"} onClick={() => { setFilter("all"); setLimit(40); }}>{t("Todo", "All")}</button>
+            {kinds.map(kind => <button key={kind} aria-pressed={filter === kind} onClick={() => { setFilter(kind); setLimit(40); }}>{labels[locale][kind]}</button>)}
+          </div>
+          <div className="result-bar"><p className="muted result-count" aria-live="polite">{filtered.length} {filtered.length === 1 ? t("elemento", "item") : t("elementos", "items")}</p>
+          {hasFilters && <button className="quiet" onClick={resetFilters}><X size={14}/>{t("Limpiar filtros", "Clear filters")}</button>}</div>
+          {filtered.length ? <>
+            {itemRows(filtered.slice(0, limit), true)}
+            {filtered.length > limit && <button className="secondary show-more" onClick={() => setLimit(limit + 40)}>{t("Cargar más", "Load more")} · {filtered.length - limit}</button>}
+          </> : <div className="empty"><BookOpen size={25}/><h2>{hasFilters ? t("Sin coincidencias", "No matches") : t("Tu biblioteca está vacía", "Your library is empty")}</h2><p>{hasFilters ? t("Prueba otra búsqueda o cambia el filtro.", "Try another search or change your filter.") : t("Guarda una primera nota para empezar a construirla.", "Save a first note to get started.")}</p></div>}
         </section>}
         {view === "graph" && <Graph workspace={workspace} locale={locale} open={open}/>}
         {view === "assistant" && <Assistant locale={locale} available={cloudAvailable} workspace={workspace} open={open} settings={() => navigate("settings")}/>}
@@ -209,6 +249,9 @@ export default function Nexus({ cloudAvailable }: { cloudAvailable: boolean }) {
       <footer className="work-footer"><span>NEXUS / {t("ESTUDIO PERSONAL", "PERSONAL STUDIO")}</span><span>{t("TU CONOCIMIENTO, A TU RITMO", "YOUR KNOWLEDGE, AT YOUR PACE")}</span></footer>
     </div>
     <div className={notice ? "notice visible" : "notice"} role="status">{notice}{notice && <button type="button" className="quiet" aria-label={t("Cerrar aviso", "Dismiss notice")} onClick={() => setNotice("")}>×</button>}</div>
+    {palette && <SearchPalette entries={workspace.entries} locale={locale} close={() => setPalette(false)}
+      open={id => { setPalette(false); open(id); }}
+      showAll={value => { setPalette(false); resetFilters(); setQuery(value); navigate("library"); requestAnimationFrame(() => searchInput.current?.focus()); }}/>}
     {editing && <Editor key={editing.entry.id} initial={editing.entry} isNew={editing.isNew} locale={locale} entries={workspace.entries.filter(item => item.id !== editing.entry.id)} edges={currentEdges}
       close={() => setEditing(null)} save={save} remove={() => commit(removeEntry(workspace, editing.entry.id))} open={open}
       removeEdge={id => { void commit({ ...workspace, relations: workspace.relations.filter(edge => edge.id !== id) }); }}

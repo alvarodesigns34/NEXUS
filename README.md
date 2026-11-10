@@ -11,9 +11,9 @@ npm ci
 npm run dev
 ```
 
-Abre [localhost:3000](http://localhost:3000). Desde **Capturar** puedes crear una nota, idea, proyecto, concepto, persona, enlace, archivo de texto o colección. Puedes añadir etiquetas y crear una relación al guardar. La biblioteca busca por título, contenido y etiquetas, incluso sin tildes. Pulsa `⌘ K` o `Ctrl K` para abrir la búsqueda.
+Abre [localhost:3000](http://localhost:3000). Desde **Capturar** puedes crear una nota, idea, proyecto, concepto, persona, enlace, archivo de texto o colección. Puedes añadir etiquetas y crear una relación al guardar. La biblioteca busca por título, contenido y etiquetas, incluso sin tildes. Pulsa `⌘ K` o `Ctrl K` para abrir la búsqueda global desde cualquier pantalla. La Biblioteca combina tipo, etiqueta y destacados, con orden por edición, creación o título.
 
-El editor guarda explícitamente, conserva cinco versiones de título y texto y permite previsualizar Markdown. El grafo muestra relaciones aceptadas y abre el original. Desde **Ajustes** puedes descargar o restaurar una copia JSON, cambiar de idioma o tema y reducir la transparencia.
+El editor guarda explícitamente, conserva cinco versiones de título y texto y permite previsualizar y descargar Markdown. Si cierras el editor o recargas, puedes volver al borrador en esa misma pestaña. El grafo muestra relaciones aceptadas y abre el original. Desde **Ajustes** puedes descargar o restaurar una copia JSON, cambiar de idioma o tema y reducir la transparencia.
 
 ## Estado
 

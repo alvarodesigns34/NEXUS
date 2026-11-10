@@ -24,8 +24,8 @@ test("captures, links, finds and opens persisted knowledge", async ({ page }) =>
   await page.reload();
 
   await page.getByRole("button", { name: "Biblioteca", exact: true }).click();
-  await page.getByRole("textbox", { name: "Buscar en la biblioteca" }).fill("oceanica");
-  await expect(page.getByText("1 elementos")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Buscar en la biblioteca" }).fill("oceanica");
+  await expect(page.getByText("1 elemento")).toBeVisible();
   await page.getByRole("button", { name: /Corteza oceánica/ }).click();
   await page.getByRole("button", { name: "Vista previa" }).click();
   await expect(page.getByText("Densa", { exact: true })).toBeVisible();
@@ -65,4 +65,51 @@ test("keeps appearance and language preferences across reloads", async ({ page }
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("html")).toHaveAttribute("data-solid", "true");
+});
+
+test("recovers a draft after reloading and opens it from global search after saving", async ({ page }) => {
+  await page.goto("/");
+  await capture(page, "Mapa de aprendizaje", "Conecta las ideas", "estudio");
+  await page.reload();
+  await page.getByRole("button", { name: "Capturar", exact: true }).click();
+  await expect(page.getByText("Borrador recuperado")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Título" })).toHaveValue("Mapa de aprendizaje");
+  await expect(page.getByRole("textbox", { name: "Contenido" })).toHaveValue("Conecta las ideas");
+  await page.getByRole("button", { name: "Destacar", exact: true }).click();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  const search = page.getByRole("combobox", { name: "Buscar en NEXUS" });
+  await expect(search).toBeFocused();
+  await search.fill("conecta");
+  await expect(page.getByRole("option", { name: /Mapa de aprendizaje/ })).toBeVisible();
+  await search.press("Enter");
+  await expect(page.getByRole("textbox", { name: "Título" })).toHaveValue("Mapa de aprendizaje");
+  await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+
+  await page.getByRole("button", { name: "Biblioteca", exact: true }).click();
+  await page.getByRole("button", { name: "Destacados", exact: true }).click();
+  await page.getByRole("combobox", { name: "Filtrar por etiqueta" }).selectOption("estudio");
+  await expect(page.getByText("1 elemento", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Idea", exact: true }).click();
+  await expect(page.getByText("Sin coincidencias")).toBeVisible();
+  await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Mapa de aprendizaje/ })).toBeVisible();
+});
+
+test("keeps the mobile glass lens aligned with the active tab", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "The dock is a mobile layout.");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const tab = page.getByRole("button", { name: "Grafo", exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-current", "page");
+  const lens = page.locator(".dock-lens");
+  await expect(lens).toBeVisible();
+  const [lensBox, tabBox] = await Promise.all([lens.boundingBox(), tab.boundingBox()]);
+  expect(lensBox).not.toBeNull();
+  expect(tabBox).not.toBeNull();
+  expect(Math.abs(lensBox!.x - tabBox!.x)).toBeLessThan(2);
+  expect(Math.abs(lensBox!.width - tabBox!.width)).toBeLessThan(2);
 });

@@ -82,3 +82,12 @@ export function removeEntry(workspace: Workspace, id: string): Workspace {
   return { ...workspace, entries: workspace.entries.filter(entry => entry.id !== id),
     relations: workspace.relations.filter(edge => edge.from !== id && edge.to !== id) };
 }
+
+export function excerpt(entry: Entry, query = "") {
+  const text = entry.body.replace(/\s+/g, " ").trim() || entry.url;
+  const word = normalize(query.trim()).split(/\s+/)[0];
+  const match = word ? normalize(text).indexOf(word) : -1;
+  const start = Math.max(0, match - 30);
+  const end = start + 110;
+  return (start > 0 ? "…" : "") + text.slice(start, end) + (text.length > end ? "…" : "");
+}

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, statusBarStyle: "default", title: "NEXUS" }
 };
 
-export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f6f5f0" };
+export const viewport: Viewport = { viewportFit: "cover", themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f2f2fa" }, { media: "(prefers-color-scheme: dark)", color: "#11111d" }] };
 
 export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="es"><body>{children}</body></html>;
